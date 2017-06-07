@@ -103,12 +103,14 @@ class ObtainAmritaLabDataTask(QueueTask):
             return
 
         iframe_url = iframe['src']
+        base_url, args = iframe_url.split('?', 1)
+        args = '&'.join([ arg for arg in query.split('&') if arg.split('=')[0] not in ['elink_title', 'linktoken', 'elink_lan'] ])
         self.result = {
-            'url' : iframe_url,
+            'url' : base_url + '?' + args,
             'sim_url': simulator_link
         }
 
-def get_laboratories():
+def get_laboratories(username, password):
     laboratories = AMRITA.rlms_cache.get('get_laboratories')
     if laboratories:
         return laboratories['laboratories']
@@ -124,11 +126,6 @@ def get_laboratories():
     }
 
     lab_tasks = []
-    
-    username = os.environ.get('AMRITA_USERNAME')
-    password = os.environ.get('AMRITA_PASSWORD')
-    if not username or not password:
-        raise Exception("MISSING AMRITA_USERNAME OR AMRITA_PASSWORD")
 
     session = requests.Session()
     session.post("http://amrita.olabs.edu.in/?pg=bindex&bsub=login_page", data={'submit':'Login', 'username':username, 'password':password})
@@ -147,8 +144,8 @@ def get_laboratories():
     run_tasks(lab_tasks)
     
     result = {
-        'laboratories' : []
-        'all_links': []
+        'laboratories' : [],
+        'all_links': [],
     }
     all_labs = []
     for task in lab_tasks:
@@ -191,13 +188,13 @@ class RLMS(BaseRLMS):
         return CAPABILITIES 
 
     def get_laboratories(self, **kwargs):
-        return get_laboratories()
+        return get_laboratories(self.amrita_username, self.amrita_password)
 
     def get_base_urls(self):
         return [ 'http://amrita.olabs.edu.in' ]
 
     def get_lab_by_url(self, url):
-        laboratories = get_laboratories()
+        laboratories = get_laboratories(self.amrita_username, self.amrita_password)
         for lab in laboratories['all_links']:
             if lab['sim-url'] == url or lab['iframe-url'] == url or lab['base-url'] == url:
                 return lab['lab']
