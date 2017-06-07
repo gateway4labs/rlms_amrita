@@ -14,7 +14,9 @@ import threading
 import Queue
 import functools
 import traceback
+import pprint
 
+import requests
 from bs4 import BeautifulSoup
 
 from flask.ext.wtf import TextField, PasswordField, Required, URL, ValidationError
@@ -44,18 +46,130 @@ class AmritaAddForm(AddForm):
     DEFAULT_PUBLIC_IDENTIFIER = 'amrita'
     DEFAULT_AUTOLOAD = True
 
+    amrita_username  = TextField("Amrita username",        validators = [Required()])
+    amrita_password  = PasswordField("Amrita password")
+
+
     def __init__(self, add_or_edit, *args, **kwargs):
         super(AmritaAddForm, self).__init__(*args, **kwargs)
         self.add_or_edit = add_or_edit
 
     @staticmethod
     def process_configuration(old_configuration, new_configuration):
-        return new_configuration
+        old_configuration_dict = json.loads(old_configuration)
+        new_configuration_dict = json.loads(new_configuration)
+        if new_configuration_dict.get('amrita_password', '') == '':
+            new_configuration_dict['amrita_password'] = old_configuration_dict.get('amrita_password','')
+        return json.dumps(new_configuration_dict)
+
+    def validate_amrita_password(form, field):
+        if form.add_or_edit and field.data == '':
+            raise ValidationError("This field is required.")
+
 
 class AmritaFormCreator(BaseFormCreator):
 
     def get_add_form(self):
         return AmritaAddForm
+
+class ObtainAmritaLabDataTask(QueueTask):
+    def __init__(self, laboratory_id, session):
+        self.session = session
+        self.result = {}
+        super(ObtainAmritaLabDataTask, self).__init__(laboratory_id)
+
+    def task(self):
+        text = self.session.get(self.laboratory_id).text
+        soup = BeautifulSoup(text, 'lxml')
+        element = soup.find(text="Simulator")
+        if not element:
+            return
+
+        a_element = None
+        for parent in element.parents:
+            if parent.name == 'a':
+                a_element = parent
+                break
+
+        if not a_element:
+            return
+
+        simulator_link = a_element['href']
+        if simulator_link.startswith('?'):
+            simulator_link = 'http://' + urlparse.urlparse(self.laboratory_id).netloc + '/' + simulator_link
+        soup_sim = BeautifulSoup(self.session.get(simulator_link).text, 'lxml')
+        iframe = soup_sim.find("iframe")
+        if not iframe:
+            return
+
+        iframe_url = iframe['src']
+        self.result = {
+            'url' : iframe_url,
+            'sim_url': simulator_link
+        }
+
+def get_laboratories():
+    laboratories = AMRITA.rlms_cache.get('get_laboratories')
+    if laboratories:
+        return laboratories['laboratories']
+
+    physics = 'http://www.olabs.edu.in/?pg=topMenu&id=40'
+    biology = 'http://www.olabs.edu.in/?pg=topMenu&id=53'
+    chemistry = 'http://www.olabs.edu.in/?pg=topMenu&id=41'
+
+    all_category_urls = physics, biology, chemistry
+
+    all_lab_links = {
+        # url: name
+    }
+
+    lab_tasks = []
+    
+    username = os.environ.get('AMRITA_USERNAME')
+    password = os.environ.get('AMRITA_PASSWORD')
+    if not username or not password:
+        raise Exception("MISSING AMRITA_USERNAME OR AMRITA_PASSWORD")
+
+    session = requests.Session()
+    session.post("http://amrita.olabs.edu.in/?pg=bindex&bsub=login_page", data={'submit':'Login', 'username':username, 'password':password})
+    # From now on, the user is logged in
+
+    for category_url in all_category_urls:
+        text = AMRITA.cached_session.get(category_url).text
+        soup = BeautifulSoup(text, 'lxml')
+        for div_element in soup.find_all(class_='exptPadng'):
+            for a_element in div_element.find_all('a'):
+                inner_text = a_element.get_text().strip()
+                if inner_text:
+                    all_lab_links[a_element['href']] = inner_text
+                    lab_tasks.append(ObtainAmritaLabDataTask(a_element['href'], session))
+    
+    run_tasks(lab_tasks)
+    
+    result = {
+        'laboratories' : []
+        'all_links': []
+    }
+    all_labs = []
+    for task in lab_tasks:
+        if task.result:
+            name = all_lab_links[task.laboratory_id]
+            iframe_url = task.result['url'] # TODO: remove linktoken
+            sim_url = task.result['sim_url']
+            
+            lab = Laboratory(name=name, laboratory_id=iframe_url, description=name, home_url=sim_url)
+            result['laboratories'].append(lab)
+            result['all_links'].append({
+                'lab': lab,
+                'name': name,
+                'base-url': all_lab_links[task.laboratory_id],
+                'sim-url': sim_url,
+                'iframe-url': iframe_url,
+            })
+
+    AMRITA.rlms_cache['get_laboratories'] = result
+    return result['laboratories']
+
 
 FORM_CREATOR = AmritaFormCreator()
 
@@ -65,6 +179,10 @@ class RLMS(BaseRLMS):
 
     def __init__(self, configuration, *args, **kwargs):
         self.configuration = json.loads(configuration or '{}')
+        self.amrita_username = self.configuration.get('amrita_username', os.environ.get('AMRITA_USERNAME'))
+        self.amrita_password = self.configuration.get('amrita_password', os.environ.get('AMRITA_PASSWORD'))
+        if not self.amrita_username or not self.amrita_password:
+            raise Exception("Invalid Amrita settings: credentials required")
 
     def get_version(self):
         return Versions.VERSION_1
@@ -73,19 +191,22 @@ class RLMS(BaseRLMS):
         return CAPABILITIES 
 
     def get_laboratories(self, **kwargs):
-        return []
+        return get_laboratories()
 
     def get_base_urls(self):
         return [ 'http://amrita.olabs.edu.in' ]
 
     def get_lab_by_url(self, url):
+        laboratories = get_laboratories()
+        for lab in laboratories['all_links']:
+            if lab['sim-url'] == url or lab['iframe-url'] == url or lab['base-url'] == url:
+                return lab['lab']
         return None
 
     def reserve(self, laboratory_id, username, institution, general_configuration_str, particular_configurations, request_payload, user_properties, *args, **kwargs):
-        url = 'http://amrita.olabs.edu.in'
         response = {
-            'reservation_id' : url,
-            'load_url' : url
+            'reservation_id' : laboratory_id,
+            'load_url' : laboratory_id
         }
         return response
 
@@ -102,28 +223,11 @@ class RLMS(BaseRLMS):
 class AmritaTaskQueue(QueueTask):
     RLMS_CLASS = RLMS
 
-def populate_cache():
-    rlms = RLMS("{}")
-    dbg("Retrieving labs")
-    LANGUAGES = get_languages()
-    global ALL_LINKS
-    ALL_LINKS = retrieve_all_links()
-
-    try:
-        tasks = []
-        for lab in rlms.get_laboratories():
-            tasks.append(AmritaTaskQueue(lab.laboratory_id))
-
-        run_tasks(tasks)
-
-        dbg("Finished")
-    finally:
-        ALL_LINKS = None
-        sys.stdout.flush()
-        sys.stderr.flush()
+def populate_cache(rlms):
+    rlms.get_laboratories()
 
 AMRITA = register("Amrita", ['1.0'], __name__)
-AMRITA.add_global_periodic_task('Populating cache', populate_cache, hours = 22)
+AMRITA.add_local_periodic_task('Populating cache', populate_cache, hours = 22)
 
 DEBUG = AMRITA.is_debug() or (os.environ.get('G4L_DEBUG') or '').lower() == 'true' or False
 DEBUG_LOW_LEVEL = DEBUG and (os.environ.get('G4L_DEBUG_LOW') or '').lower() == 'true'
@@ -158,11 +262,10 @@ def main():
     return
 
     for lab in laboratories[:5]:
-        for lang in ('en', 'pt'):
-            t0 = time.time()
-            print rlms.reserve(lab.laboratory_id, 'tester', 'foo', '', '', '', '', locale = lang)
-            tf = time.time()
-            print tf - t0, "seconds"
+        t0 = time.time()
+        print rlms.reserve(lab.laboratory_id, 'tester', 'foo', '', '', '', '', locale = lang)
+        tf = time.time()
+        print tf - t0, "seconds"
     
 
 if __name__ == '__main__':
