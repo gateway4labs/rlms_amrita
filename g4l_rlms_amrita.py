@@ -104,7 +104,7 @@ class ObtainAmritaLabDataTask(QueueTask):
 
         iframe_url = iframe['src']
         base_url, args = iframe_url.split('?', 1)
-        args = '&'.join([ arg for arg in query.split('&') if arg.split('=')[0] not in ['elink_title', 'linktoken', 'elink_lan'] ])
+        args = '&'.join([ arg for arg in args.split('&') if arg.split('=')[0] not in ['elink_title', 'linktoken', 'elink_lan'] ])
         self.result = {
             'url' : base_url + '?' + args,
             'sim_url': simulator_link
@@ -113,7 +113,7 @@ class ObtainAmritaLabDataTask(QueueTask):
 def get_laboratories(username, password):
     laboratories = AMRITA.rlms_cache.get('get_laboratories')
     if laboratories:
-        return laboratories['laboratories']
+        return laboratories
 
     physics = 'http://www.olabs.edu.in/?pg=topMenu&id=40'
     biology = 'http://www.olabs.edu.in/?pg=topMenu&id=53'
@@ -159,13 +159,13 @@ def get_laboratories(username, password):
             result['all_links'].append({
                 'lab': lab,
                 'name': name,
-                'base-url': all_lab_links[task.laboratory_id],
+                'base-url': task.laboratory_id,
                 'sim-url': sim_url,
                 'iframe-url': iframe_url,
             })
 
     AMRITA.rlms_cache['get_laboratories'] = result
-    return result['laboratories']
+    return result
 
 
 FORM_CREATOR = AmritaFormCreator()
@@ -188,7 +188,7 @@ class RLMS(BaseRLMS):
         return CAPABILITIES 
 
     def get_laboratories(self, **kwargs):
-        return get_laboratories(self.amrita_username, self.amrita_password)
+        return get_laboratories(self.amrita_username, self.amrita_password)['laboratories']
 
     def get_base_urls(self):
         return [ 'http://amrita.olabs.edu.in' ]
@@ -196,6 +196,9 @@ class RLMS(BaseRLMS):
     def get_lab_by_url(self, url):
         laboratories = get_laboratories(self.amrita_username, self.amrita_password)
         for lab in laboratories['all_links']:
+            if lab['iframe-url'] == 'http://amrita.olabs.co.in/olab/html5/?sub=CHE&cat=ELC&exp=EMF_measurement&tempId=olab_ot':
+                pprint.pprint(lab)
+                print(url)
             if lab['sim-url'] == url or lab['iframe-url'] == url or lab['base-url'] == url:
                 return lab['lab']
         return None
@@ -224,7 +227,7 @@ def populate_cache(rlms):
     rlms.get_laboratories()
 
 AMRITA = register("Amrita", ['1.0'], __name__)
-AMRITA.add_local_periodic_task('Populating cache', populate_cache, hours = 22)
+AMRITA.add_local_periodic_task('Populating cache', populate_cache, hours = 23)
 
 DEBUG = AMRITA.is_debug() or (os.environ.get('G4L_DEBUG') or '').lower() == 'true' or False
 DEBUG_LOW_LEVEL = DEBUG and (os.environ.get('G4L_DEBUG_LOW') or '').lower() == 'true'
