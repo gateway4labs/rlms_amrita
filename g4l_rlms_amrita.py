@@ -110,8 +110,10 @@ class ObtainAmritaLabDataTask(QueueTask):
             'sim_url': simulator_link
         }
 
+MIN_TIME = datetime.timedelta(hours=24)
+
 def get_laboratories(username, password):
-    laboratories = AMRITA.rlms_cache.get('get_laboratories')
+    laboratories = AMRITA.rlms_cache.get('get_laboratories',  min_time = MIN_TIME)
     if laboratories:
         return laboratories
 
