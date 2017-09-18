@@ -193,7 +193,7 @@ class RLMS(BaseRLMS):
         return get_laboratories(self.amrita_username, self.amrita_password)['laboratories']
 
     def get_base_urls(self):
-        return [ 'http://amrita.olabs.edu.in' ]
+        return [ 'http://amrita.olabs.edu.in', 'http://cdac.olabs.edu.in' ]
 
     def get_lab_by_url(self, url):
         laboratories = get_laboratories(self.amrita_username, self.amrita_password)
