@@ -102,7 +102,7 @@ class ObtainAmritaLabDataTask(QueueTask):
         if not iframe:
             return
 
-        iframe_url = iframe['src']
+        iframe_url = iframe['src'].strip()
         base_url, args = iframe_url.split('?', 1)
         args = '&'.join([ arg for arg in args.split('&') if arg.split('=')[0] not in ['elink_title', 'linktoken', 'elink_lan'] ])
         self.result = {
