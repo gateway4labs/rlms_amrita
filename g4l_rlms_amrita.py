@@ -79,7 +79,7 @@ class ObtainAmritaLabDataTask(QueueTask):
         super(ObtainAmritaLabDataTask, self).__init__(laboratory_id)
 
     def task(self):
-        text = self.session.get(self.laboratory_id, timeout=(10,10)).text
+        text = self.session.get(self.laboratory_id, timeout=(30,30)).text
         soup = BeautifulSoup(text, 'lxml')
         element = soup.find(text="Simulator")
         if not element:
@@ -97,7 +97,7 @@ class ObtainAmritaLabDataTask(QueueTask):
         simulator_link = a_element['href']
         if simulator_link.startswith('?'):
             simulator_link = 'http://' + urlparse.urlparse(self.laboratory_id).netloc + '/' + simulator_link
-        soup_sim = BeautifulSoup(self.session.get(simulator_link, timeout=(10,10)).text, 'lxml')
+        soup_sim = BeautifulSoup(self.session.get(simulator_link, timeout=(30,30)).text, 'lxml')
         iframe = soup_sim.find("iframe")
         if not iframe:
             return
@@ -130,11 +130,11 @@ def get_laboratories(username, password):
     lab_tasks = []
 
     session = requests.Session()
-    session.post("http://amrita.olabs.edu.in/?pg=bindex&bsub=login_page", data={'submit':'Login', 'username':username, 'password':password}, timeout=(10,10))
+    session.post("http://amrita.olabs.edu.in/?pg=bindex&bsub=login_page", data={'submit':'Login', 'username':username, 'password':password}, timeout=(30,30))
     # From now on, the user is logged in
 
     for category_url in all_category_urls:
-        text = session.get(category_url, timeout=(10, 10)).text
+        text = session.get(category_url, timeout=(30, 30)).text
         soup = BeautifulSoup(text, 'lxml')
         for div_element in soup.find_all(class_='exptPadng'):
             for a_element in div_element.find_all('a'):
