@@ -72,14 +72,24 @@ class AmritaFormCreator(BaseFormCreator):
     def get_add_form(self):
         return AmritaAddForm
 
+def create_amrita_session(username, password):
+    session = requests.Session()
+    session.post("http://amrita.olabs.edu.in/?pg=bindex&bsub=login_page", data={'submit':'Login', 'username':username, 'password':password}, timeout=(30,30))
+    return session
+
+
 class ObtainAmritaLabDataTask(QueueTask):
-    def __init__(self, laboratory_id, session):
-        self.session = session
+    def __init__(self, laboratory_id, username, password):
+        self.username = username
+        self.password = password
         self.result = {}
         super(ObtainAmritaLabDataTask, self).__init__(laboratory_id)
 
     def task(self):
-        text = self.session.get(self.laboratory_id, timeout=(30,30)).text
+        session = requests.Session()
+        session.post("http://amrita.olabs.edu.in/?pg=bindex&bsub=login_page", data={'submit':'Login', 'username':self.username, 'password':self.password}, timeout=(30,30))
+
+        text = session.get(self.laboratory_id, timeout=(30,30)).text
         soup = BeautifulSoup(text, 'lxml')
         element = soup.find(text="Simulator")
         if not element:
@@ -97,7 +107,7 @@ class ObtainAmritaLabDataTask(QueueTask):
         simulator_link = a_element['href']
         if simulator_link.startswith('?'):
             simulator_link = 'http://' + urlparse.urlparse(self.laboratory_id).netloc + '/' + simulator_link
-        soup_sim = BeautifulSoup(self.session.get(simulator_link, timeout=(30,30)).text, 'lxml')
+        soup_sim = BeautifulSoup(session.get(simulator_link, timeout=(30,30)).text, 'lxml')
         iframe = soup_sim.find("iframe")
         if not iframe:
             return
@@ -129,9 +139,7 @@ def get_laboratories(username, password):
 
     lab_tasks = []
 
-    session = requests.Session()
-    session.post("http://amrita.olabs.edu.in/?pg=bindex&bsub=login_page", data={'submit':'Login', 'username':username, 'password':password}, timeout=(30,30))
-    # From now on, the user is logged in
+    session = create_amrita_session(username, password)
 
     for category_url in all_category_urls:
         text = session.get(category_url, timeout=(30, 30)).text
@@ -141,10 +149,10 @@ def get_laboratories(username, password):
                 inner_text = a_element.get_text().strip()
                 if inner_text:
                     all_lab_links[a_element['href']] = inner_text
-                    lab_tasks.append(ObtainAmritaLabDataTask(a_element['href'], session))
-    
-    run_tasks(lab_tasks, threads=8)
-    
+                    lab_tasks.append(ObtainAmritaLabDataTask(a_element['href'], username, password))
+
+    run_tasks(lab_tasks, threads=4)
+
     result = {
         'laboratories' : [],
         'all_links': [],
@@ -155,7 +163,7 @@ def get_laboratories(username, password):
             name = all_lab_links[task.laboratory_id]
             iframe_url = task.result['url'] # TODO: remove linktoken
             sim_url = task.result['sim_url']
-            
+
             lab = Laboratory(name=name, laboratory_id=iframe_url, description=name, home_url=sim_url)
             result['laboratories'].append(lab)
             result['all_links'].append({
