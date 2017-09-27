@@ -143,7 +143,7 @@ def get_laboratories(username, password):
                     all_lab_links[a_element['href']] = inner_text
                     lab_tasks.append(ObtainAmritaLabDataTask(a_element['href'], session))
     
-    run_tasks(lab_tasks)
+    run_tasks(lab_tasks, threads=8)
     
     result = {
         'laboratories' : [],
