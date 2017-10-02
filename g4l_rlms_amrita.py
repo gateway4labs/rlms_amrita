@@ -180,7 +180,7 @@ def get_laboratories(username, password):
 
 FORM_CREATOR = AmritaFormCreator()
 
-CAPABILITIES = [ Capabilities.WIDGET, Capabilities.URL_FINDER ]
+CAPABILITIES = [ Capabilities.WIDGET, Capabilities.URL_FINDER, Capabilities.CHECK_URLS ]
 
 class RLMS(BaseRLMS):
 
@@ -212,6 +212,9 @@ class RLMS(BaseRLMS):
             if lab['sim-url'] == url or lab['iframe-url'] == url or lab['base-url'] == url:
                 return lab['lab']
         return None
+
+    def get_check_urls(self, laboratory_id):
+        return [ laboratory_id ]
 
     def reserve(self, laboratory_id, username, institution, general_configuration_str, particular_configurations, request_payload, user_properties, *args, **kwargs):
         response = {
