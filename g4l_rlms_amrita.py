@@ -240,7 +240,7 @@ def populate_cache(rlms):
     rlms.get_laboratories()
 
 AMRITA = register("Amrita", ['1.0'], __name__)
-AMRITA.add_local_periodic_task('Populating cache', populate_cache, hours = 23)
+AMRITA.add_local_periodic_task('Populating cache', populate_cache, hours = 13)
 
 DEBUG = AMRITA.is_debug() or (os.environ.get('G4L_DEBUG') or '').lower() == 'true' or False
 DEBUG_LOW_LEVEL = DEBUG and (os.environ.get('G4L_DEBUG_LOW') or '').lower() == 'true'
