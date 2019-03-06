@@ -40,7 +40,7 @@ def dbg_lowlevel(msg, scope):
 
 class AmritaAddForm(AddForm):
 
-    DEFAULT_URL = 'http://amrita.olabs.edu.in'
+    DEFAULT_URL = 'https://amrita.olabs.edu.in'
     DEFAULT_LOCATION = 'Coimbatore, India'
     DEFAULT_PUBLICLY_AVAILABLE = True
     DEFAULT_PUBLIC_IDENTIFIER = 'amrita'
@@ -74,7 +74,7 @@ class AmritaFormCreator(BaseFormCreator):
 
 def create_amrita_session(username, password):
     session = requests.Session()
-    session.post("http://amrita.olabs.edu.in/?pg=bindex&bsub=login_page", data={'submit':'Login', 'username':username, 'password':password}, timeout=(30,30))
+    session.post("https://amrita.olabs.edu.in/?pg=bindex&bsub=login_page", data={'submit':'Login', 'username':username, 'password':password}, timeout=(30,30), verify=False)
     return session
 
 
@@ -87,9 +87,9 @@ class ObtainAmritaLabDataTask(QueueTask):
 
     def task(self):
         session = requests.Session()
-        session.post("http://amrita.olabs.edu.in/?pg=bindex&bsub=login_page", data={'submit':'Login', 'username':self.username, 'password':self.password}, timeout=(30,30))
+        session.post("https://amrita.olabs.edu.in/?pg=bindex&bsub=login_page", data={'submit':'Login', 'username':self.username, 'password':self.password}, timeout=(30,30), verify=False)
 
-        text = session.get(self.laboratory_id, timeout=(30,30)).text
+        text = session.get(self.laboratory_id, timeout=(30,30), verify=False).text
         soup = BeautifulSoup(text, 'lxml')
         element = soup.find(text="Simulator")
         if not element:
@@ -107,7 +107,7 @@ class ObtainAmritaLabDataTask(QueueTask):
         simulator_link = a_element['href']
         if simulator_link.startswith('?'):
             simulator_link = 'http://' + urlparse.urlparse(self.laboratory_id).netloc + '/' + simulator_link
-        soup_sim = BeautifulSoup(session.get(simulator_link, timeout=(30,30)).text, 'lxml')
+        soup_sim = BeautifulSoup(session.get(simulator_link, timeout=(30,30), verify=False).text, 'lxml')
         iframe = soup_sim.find("iframe")
         if not iframe:
             return
@@ -127,9 +127,9 @@ def get_laboratories(username, password):
     if laboratories:
         return laboratories
 
-    physics = 'http://www.olabs.edu.in/?pg=topMenu&id=40'
-    biology = 'http://www.olabs.edu.in/?pg=topMenu&id=53'
-    chemistry = 'http://www.olabs.edu.in/?pg=topMenu&id=41'
+    physics = 'https://www.olabs.edu.in/?pg=topMenu&id=40'
+    biology = 'https://www.olabs.edu.in/?pg=topMenu&id=53'
+    chemistry = 'https://www.olabs.edu.in/?pg=topMenu&id=41'
 
     all_category_urls = physics, biology, chemistry
 
@@ -142,7 +142,7 @@ def get_laboratories(username, password):
     session = create_amrita_session(username, password)
 
     for category_url in all_category_urls:
-        text = session.get(category_url, timeout=(30, 30)).text
+        text = session.get(category_url, timeout=(30, 30), verify=False).text
         soup = BeautifulSoup(text, 'lxml')
         for div_element in soup.find_all(class_='exptPadng'):
             for a_element in div_element.find_all('a'):
@@ -217,6 +217,9 @@ class RLMS(BaseRLMS):
         return [ laboratory_id ]
 
     def reserve(self, laboratory_id, username, institution, general_configuration_str, particular_configurations, request_payload, user_properties, *args, **kwargs):
+        if 'edu.in/' in laboratory_id:
+            laboratory_id = laboratory_id.replace('http://', 'https://')
+
         response = {
             'reservation_id' : laboratory_id,
             'load_url' : laboratory_id
@@ -224,6 +227,9 @@ class RLMS(BaseRLMS):
         return response
 
     def load_widget(self, reservation_id, widget_name, **kwargs):
+        if 'edu.in/' in reservation_id:
+            reservation_id = reservation_id.replace('http://', 'https://')
+
         return {
             'url' : reservation_id
         }
