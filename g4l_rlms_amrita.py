@@ -113,6 +113,12 @@ class ObtainAmritaLabDataTask(QueueTask):
             return
 
         iframe_url = iframe['src'].strip()
+        if iframe_url.startswith('//'):
+            iframe_url = 'http:{}'.format(iframe_url)
+
+        if iframe_url.startswith('http://180.149.57.33/'):
+            iframe_url = iframe_url.replace('180.149.57.33', 'www.olabs.edu.in')
+
         base_url, args = iframe_url.split('?', 1)
         args = '&'.join([ arg for arg in args.split('&') if arg.split('=')[0] not in ['elink_title', 'linktoken', 'elink_lan'] ])
         self.result = {
@@ -148,8 +154,18 @@ def get_laboratories(username, password):
             for a_element in div_element.find_all('a'):
                 inner_text = a_element.get_text().strip()
                 if inner_text:
-                    all_lab_links[a_element['href']] = inner_text
-                    lab_tasks.append(ObtainAmritaLabDataTask(a_element['href'], username, password))
+                    href = a_element['href']
+                    if href.startswith('//'):
+                        href = 'http:{}'.format(href)
+                    all_lab_links[href] = inner_text
+                    lab_tasks.append(ObtainAmritaLabDataTask(href, username, password))
+
+    # for lab_task in lab_tasks:
+    #     print(lab_task.laboratory_id)
+    # import json
+    # print(json.dumps(all_lab_links, indent=4))
+        
+
 
     run_tasks(lab_tasks, threads=4)
 
