@@ -233,6 +233,9 @@ class RLMS(BaseRLMS):
         return [ laboratory_id ]
 
     def reserve(self, laboratory_id, username, institution, general_configuration_str, particular_configurations, request_payload, user_properties, *args, **kwargs):
+        if '.co.in/' in laboratory_id:
+            laboratory_id = laboratory_id.replace('.co.in/', '.edu.in/')
+
         if 'edu.in/' in laboratory_id:
             laboratory_id = laboratory_id.replace('http://', 'https://')
 
