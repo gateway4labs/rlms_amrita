@@ -217,14 +217,16 @@ class RLMS(BaseRLMS):
         return get_laboratories(self.amrita_username, self.amrita_password)['laboratories']
 
     def get_base_urls(self):
-        return [ 'http://amrita.olabs.edu.in', 'http://cdac.olabs.edu.in' ]
+        return [ 'http://amrita.olabs.edu.in', 'http://amrita.olabs.co.in', 'http://cdac.olabs.edu.in', 'https://amrita.olabs.edu.in', 'https://amrita.olabs.co.in', 'https://cdac.olabs.edu.in' ]
 
     def get_lab_by_url(self, url):
+        if '?' in url:
+            base_url, args = url.split('?', 1)
+            args = '&'.join([ arg for arg in args.split('&') if arg.split('=')[0] not in ['elink_title', 'linktoken', 'elink_lan'] ])
+            url = base_url + '?' + args
+
         laboratories = get_laboratories(self.amrita_username, self.amrita_password)
         for lab in laboratories['all_links']:
-            if lab['iframe-url'] == 'http://amrita.olabs.co.in/olab/html5/?sub=CHE&cat=ELC&exp=EMF_measurement&tempId=olab_ot':
-                pprint.pprint(lab)
-                print(url)
             if lab['sim-url'] == url or lab['iframe-url'] == url or lab['base-url'] == url:
                 return lab['lab']
         return None
