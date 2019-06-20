@@ -16,13 +16,15 @@ import functools
 import traceback
 import pprint
 
+import webpage2html
 import requests
 from bs4 import BeautifulSoup
 
+from flask import Blueprint, url_for
 from flask.ext.wtf import TextField, PasswordField, Required, URL, ValidationError
 
 from labmanager.forms import AddForm
-from labmanager.rlms import register, Laboratory, CacheDisabler, LabNotFoundError
+from labmanager.rlms import register, Laboratory, CacheDisabler, LabNotFoundError, register_blueprint
 from labmanager.rlms.base import BaseRLMS, BaseFormCreator, Capabilities, Versions
 from labmanager.rlms.queue import QueueTask, run_tasks
 
@@ -128,10 +130,13 @@ class ObtainAmritaLabDataTask(QueueTask):
 
 MIN_TIME = datetime.timedelta(hours=24)
 
-def get_laboratories(username, password):
-    laboratories = AMRITA.rlms_cache.get('get_laboratories',  min_time = MIN_TIME)
+def get_laboratories(username, password, force_cached=False):
+    laboratories = AMRITA.global_cache.get('get_laboratories',  min_time = MIN_TIME)
     if laboratories:
         return laboratories
+
+    if force_cached: # It should have returned already
+        return None
 
     physics = 'https://www.olabs.edu.in/?pg=topMenu&id=40'
     biology = 'https://www.olabs.edu.in/?pg=topMenu&id=53'
@@ -190,13 +195,13 @@ def get_laboratories(username, password):
                 'iframe-url': iframe_url,
             })
 
-    AMRITA.rlms_cache['get_laboratories'] = result
+    AMRITA.global_cache['get_laboratories'] = result
     return result
 
 
 FORM_CREATOR = AmritaFormCreator()
 
-CAPABILITIES = [ Capabilities.WIDGET, Capabilities.URL_FINDER, Capabilities.CHECK_URLS ]
+CAPABILITIES = [ Capabilities.WIDGET, Capabilities.URL_FINDER, Capabilities.CHECK_URLS, Capabilities.DOWNLOAD_LIST ]
 
 class RLMS(BaseRLMS):
 
@@ -259,6 +264,11 @@ class RLMS(BaseRLMS):
         default_widget = dict( name = 'default', description = 'Default widget' )
         return [ default_widget ]
 
+    def get_downloads(self, laboratory_id):
+        return {
+            'en_ALL': url_for('amrita.amrita_download', laboratory_id=laboratory_id, _external=True),
+        }
+
 
 class AmritaTaskQueue(QueueTask):
     RLMS_CLASS = RLMS
@@ -279,6 +289,42 @@ if DEBUG_LOW_LEVEL:
     print("Debug low level activated")
 
 sys.stdout.flush()
+
+amrita_blueprint = Blueprint('amrita', __name__)
+
+class FakeRequestsClass(object):
+    def fake_get(self, *args, **kwargs):
+        kwargs['verify'] = False
+        return requests.get(*args, **kwargs)
+
+    def __getattr__(self, name):
+        if name == 'get':
+            return self.fake_get
+        return getattr(requests, name)
+
+@amrita_blueprint.route('/id/<path:laboratory_id>')
+def amrita_download(laboratory_id):
+    result = get_laboratories(os.environ.get('AMRITA_USERNAME'), os.environ.get('AMRITA_PASSWORD'), force_cached=True)
+    if result is None:
+        return "Not found", 404
+
+    laboratories = result['laboratories']
+    link = None
+    for lab in laboratories:
+        if lab.laboratory_id == laboratory_id:
+            link = lab.laboratory_id
+
+    if not link:
+        return "Not found", 404
+
+    webpage2html.requests = FakeRequestsClass()
+    try:
+        generated = webpage2html.generate(index=link, keep_script=True, verbose=False, verify=False)
+    finally:
+        webpage2html.requests = requests
+    return generated.encode()
+
+register_blueprint(amrita_blueprint, url='/amrita')
 
 def main():
     with CacheDisabler():
