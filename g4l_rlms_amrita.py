@@ -20,7 +20,7 @@ import webpage2html
 import requests
 from bs4 import BeautifulSoup
 
-from flask import Blueprint, url_for
+from flask import Blueprint, url_for, jsonify
 from flask.ext.wtf import TextField, PasswordField, Required, URL, ValidationError
 
 from labmanager.forms import AddForm
@@ -301,6 +301,23 @@ class FakeRequestsClass(object):
         if name == 'get':
             return self.fake_get
         return getattr(requests, name)
+
+@amrita_blueprint.route('/ids')
+def amrita_list():
+    result = get_laboratories(os.environ.get('AMRITA_USERNAME'), os.environ.get('AMRITA_PASSWORD'), force_cached=True)
+    if result is None:
+        return jsonify(success=False, message="No lab found at all")
+
+    labs = []
+    for laboratories in result['laboratories']
+        labs.append({
+            'laboratory_id': lab.laboratory_id,
+            'name': lab.name,
+            'description': lab.description,
+            'home_url': lab.home_url,
+        })
+    return jsonify(success=True, labs=labs)
+    
 
 @amrita_blueprint.route('/id/<path:laboratory_id>')
 def amrita_download(laboratory_id):
