@@ -331,6 +331,24 @@ def amrita_download(laboratory_id):
         if lab.laboratory_id == laboratory_id:
             link = lab.laboratory_id
 
+    if link is None:
+        laboratory_id = laboratory_id.replace('.co.in', '.edu.in')
+        for lab in laboratories:
+            if lab.laboratory_id == laboratory_id:
+                link = lab.laboratory_id
+
+    if link is None:
+        laboratory_id = laboratory_id.replace('http://', 'https://')
+        for lab in laboratories:
+            if lab.laboratory_id == laboratory_id:
+                link = lab.laboratory_id
+
+    if link is None:
+        laboratory_id = laboratory_id.replace('.edu.in', '.co.in')
+        for lab in laboratories:
+            if lab.laboratory_id == laboratory_id:
+                link = lab.laboratory_id
+
     if not link:
         return "Not found", 404
 
