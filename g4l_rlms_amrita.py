@@ -309,7 +309,7 @@ def amrita_list():
         return jsonify(success=False, message="No lab found at all")
 
     labs = []
-    for laboratories in result['laboratories']
+    for laboratories in result['laboratories']:
         labs.append({
             'laboratory_id': lab.laboratory_id,
             'name': lab.name,
